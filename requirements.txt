@@ -1,0 +1,9 @@
+# Build
+pybind11>=2.10
+setuptools>=64
+# Runtime
+numpy
+jax           # CPU build; for NVIDIA GPUs install "jax[cuda12]" instead (see README)
+flax
+optax
+matplotlib    # progress plots written by train.py
