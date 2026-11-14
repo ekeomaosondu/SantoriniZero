@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Santorini agent</title>
+<style>
+:root {
+  --page: #e9eff2; --panel: #f8fafb; --ink: #15232d; --muted: #5d6d78; --line: #cfd9df;
+  --turf: #b9c9a8; --turf-edge: #a3b591; --stone: #fbfbf7; --stone-edge: #a9b2a6; --dome: #23479b;
+  --blue: #1f6fd1; --gold: #d99a12; --blue-tint: #dbe8f8; --gold-tint: #f8ecd0;
+  --win: #1c8a4a; --loss: #c2372b; --focus: #1f6fd1; --step: #c2185b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0e1a22; --panel: #15242e; --ink: #e6edf1; --muted: #93a6b2; --line: #2a3d4a;
+    --turf: #4e6447; --turf-edge: #3f533a; --stone: #e9ece6; --stone-edge: #8d978a; --dome: #4a73d6;
+    --blue: #4f97f2; --gold: #f0b43a; --blue-tint: #1c3550; --gold-tint: #3d3018;
+    --win: #43c07a; --loss: #f06a5c; --step: #ff5c9a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.app { max-width: 1180px; margin: 0 auto; padding: 16px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.net { color: var(--muted); font-size: 12.5px; }
+.status { font-size: 17px; margin: 10px 0 10px; min-height: 26px; font-weight: 550; }
+.who-0 { color: var(--blue); } .who-1 { color: var(--gold); }
+.timeline { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; margin-bottom: 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.timeline input[type=range] { width: 100%; }
+.timeline .tl-label { font-size: 13px; color: var(--muted); grid-column: 1 / -1; min-height: 18px; }
+.timeline .tl-label b { color: var(--ink); font-weight: 600; }
+.grid { display: grid; grid-template-columns: minmax(300px, 480px) minmax(320px, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .grid, .row2 { grid-template-columns: 1fr !important; } }
+.boardwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; position: relative; }
+.boardwrap .preview-tag { position: absolute; left: 14px; top: 12px; font-size: 12px; background: var(--ink); color: var(--page);
+  padding: 2px 8px; border-radius: 6px; display: none; }
+.boardwrap.previewing .preview-tag { display: block; }
+svg.board { width: 100%; height: auto; display: block; touch-action: manipulation; }
+.coords { fill: var(--muted); font-size: 11px; }
+svg.board *:not(.turf) { pointer-events: none; }
+svg.board .turf { pointer-events: all; }
+.cell.click { cursor: pointer; }
+.cell:focus-visible { outline: none; }
+.cell:focus-visible .turf { stroke: var(--focus); stroke-width: 3; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.stack > .panel + .panel { margin-top: 14px; }
+.panel h2 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
+.panel h2 small { font-weight: 450; color: var(--muted); font-size: 12.5px; margin-left: 6px; }
+.meter { position: relative; height: 26px; border-radius: 7px; overflow: hidden; display: flex; font-weight: 650; font-size: 12.5px; }
+.meter .b { background: var(--blue); color: #fff; display: flex; align-items: center; padding-left: 8px; transition: width .35s ease; white-space: nowrap; }
+.meter .g { background: var(--gold); color: #1b1300; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; flex: 1; white-space: nowrap; }
+.meter .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.7); }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.fact { font-size: 12px; color: var(--muted); }
+.fact b { display: block; color: var(--ink); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.proof { margin-top: 10px; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); }
+.proof.win { border-color: var(--win); color: var(--win); }
+.proof.loss { border-color: var(--loss); color: var(--loss); }
+.progress { height: 4px; background: var(--line); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .2s linear; }
+svg.chart { width: 100%; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.legend i { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; border-radius: 2px; }
+.line { font-size: 12.5px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+.line span { color: var(--ink); }
+details.tbl { margin-top: 6px; font-size: 12.5px; }
+details.tbl summary { cursor: pointer; color: var(--muted); }
+table.cands { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+table.cands th { text-align: left; color: var(--muted); font-weight: 550; padding: 0 6px 4px 0; }
+table.cands td { padding: 4px 6px 4px 0; border-top: 1px solid var(--line); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 12px; }
+button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 11px; cursor: pointer; }
+button:hover:not(:disabled), select:hover { border-color: var(--muted); }
+button.primary { background: var(--ink); color: var(--page); border-color: var(--ink); }
+button.accent { border-color: var(--step); color: var(--step); font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+label.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+label.rng { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+label.rng output { font-variant-numeric: tabular-nums; min-width: 34px; color: var(--muted); }
+label.rng input { width: 110px; }
+.err { color: var(--loss); font-size: 13px; min-height: 18px; margin-top: 6px; }
+.empty { color: var(--muted); font-size: 13px; }
+.treepanel { margin-top: 18px; }
+.treehead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.treebar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 8px 0; font-size: 13px; }
+.stepbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; padding: 8px 10px;
+  border: 1px dashed var(--line); border-radius: 10px; }
+.stepbar .lbl { font-size: 13px; font-weight: 600; margin-right: 4px; }
+.explain { font-size: 13px; min-height: 20px; margin: 4px 0 8px; }
+.explain b { color: var(--step); }
+.crumb { font-size: 12.5px; color: var(--muted); }
+.crumb button { padding: 1px 8px; font-size: 12px; margin-left: 6px; }
+.treebox { position: relative; height: 560px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--page); }
+.treebox:fullscreen { height: 100vh; border-radius: 0; }
+.treebox svg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
+.treebox svg.dragging { cursor: grabbing; }
+.treebox .zoombtns { position: absolute; right: 8px; top: 8px; display: flex; gap: 4px; }
+.treebox .zoombtns button { padding: 2px 9px; background: var(--panel); }
+.treebox .treemsg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; pointer-events: none; text-align: center; padding: 20px; }
+g.tnode { cursor: pointer; }
+g.tnode:hover rect.card { filter: brightness(0.97); }
+.row2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-top: 18px; }
+.log { max-height: 220px; overflow: auto; font-size: 12.5px; margin: 0; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
+.log li { padding: 3px 4px; border-top: 1px solid var(--line); display: flex; gap: 8px; cursor: pointer; border-radius: 4px; }
+.log li:first-child { border-top: 0; }
+.log li.cur { background: color-mix(in srgb, var(--line) 60%, transparent); }
+.log .n { color: var(--muted); width: 22px; text-align: right; flex: none; }
+.log .note { color: var(--muted); margin-left: auto; text-align: right; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-top: 5px; flex: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top">
+    <h1>Santorini against the agent</h1>
+    <div class="net" id="net"></div>
+  </div>
+  <div class="status" id="status" aria-live="polite">Connecting to the agent…</div>
+
+  <div class="timeline">
+    <button id="tlPrev" aria-label="Previous move">Back</button>
+    <input type="range" id="tl" min="0" max="0" value="0" aria-label="Game timeline">
+    <button id="tlNext" aria-label="Next move">Forward</button>
+    <div class="tl-label" id="tlLabel"></div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="boardwrap" id="boardwrap">
+        <svg class="board" id="board" viewBox="-22 -22 544 544" role="grid" aria-label="Board"></svg>
+        <div class="preview-tag" id="previewTag">Position from the tree</div>
+      </div>
+      <div class="err" id="err" role="alert"></div>
+      <div class="controls">
+        <button class="primary" id="newBlue">New game as Blue</button>
+        <button id="newGold">New game as Gold</button>
+        <button id="undo">Take back</button>
+        <button id="playHere" hidden>Play from here</button>
+        <button id="toNow" hidden>Back to the game</button>
+      </div>
+      <div class="controls">
+        <label>Agent strength
+          <select id="sims">
+            <option value="64">Quick (64 simulations)</option>
+            <option value="200">Casual (200)</option>
+            <option value="400" selected>Normal (400)</option>
+            <option value="1600">Strong (1,600)</option>
+            <option value="4000">Deep (4,000)</option>
+          </select>
+        </label>
+        <label class="toggle"><input type="checkbox" id="solver" checked> Exact solver</label>
+        <label class="toggle"><input type="checkbox" id="hints"> Hints on my turn</label>
+        <label class="toggle"><input type="checkbox" id="thoughts" checked> Arrows on the board</label>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="panel">
+        <h2 id="thinkTitle">What the agent thinks</h2>
+        <div class="meter" aria-label="Winning chances">
+          <div class="b" id="meterB" style="width:50%">Blue 50%</div><div class="g" id="meterG">50% Gold</div><div class="mid"></div>
+        </div>
+        <div class="facts">
+          <div class="fact">Network's first impression<b id="fNet">–</b></div>
+          <div class="fact">After search<b id="fSearch">–</b></div>
+          <div class="fact">Simulations<b id="fSims">–</b></div>
+        </div>
+        <div class="proof" id="proof">Solver: no position yet</div>
+        <div class="progress"><i id="prog"></i></div>
+      </div>
+      <div class="panel">
+        <h2>Which moves did it try? <small id="chartSub"></small></h2>
+        <svg class="chart" id="visits" viewBox="0 0 520 250" role="img" aria-label="Simulations per move"></svg>
+        <div class="legend" id="visitsLegend"></div>
+        <div class="line" id="line"></div>
+        <details class="tbl"><summary>Show as a table</summary><div id="cands"></div></details>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel treepanel">
+    <div class="treehead">
+      <h2>Search tree <small id="treeSub">Each box is a position the search reached; click one to explore from there</small></h2>
+      <div class="crumb" id="crumb"></div>
+    </div>
+    <div class="treebar">
+      <label class="rng">Max nodes <input type="range" id="tMax" min="10" max="600" step="10" value="120"><output id="tMaxV">120</output></label>
+      <label class="rng" title="Keep the most-visited children that together cover this share of their parent's simulations">Children kept <input type="range" id="tPrune" min="5" max="100" step="5" value="100"><output id="tPruneV">100%</output></label>
+      <label class="rng">Max depth <input type="range" id="tDepth" min="1" max="14" value="6"><output id="tDepthV">6</output></label>
+      <label class="toggle"><input type="checkbox" id="tBoards" checked> Boards in nodes</label>
+      <label class="toggle"><input type="checkbox" id="tPuct"> PUCT scores</label>
+      <label class="toggle"><input type="checkbox" id="tMinimal"> Minimal text</label>
+      <label class="toggle"><input type="checkbox" id="tHide" checked> Hide unvisited</label>
+    </div>
+    <div class="stepbar" id="stepbar">
+      <span class="lbl">Step through the search:</span>
+      <button id="sSelect">1. Select</button>
+      <button id="sExpand">2. Expand and evaluate</button>
+      <button id="sBackup">3. Back up</button>
+      <button id="sOne">Run 1 simulation</button>
+      <button id="sMany">Run 25</button>
+      <label class="toggle" style="margin-left:auto"><input type="checkbox" id="pause"> Pause the agent on its turn</label>
+      <button class="accent" id="letMove" hidden>Let the agent move</button>
+    </div>
+    <div class="explain" id="explain"></div>
+    <div class="treebox" id="treebox">
+      <svg id="tree" aria-label="Search tree"><g id="treeG"></g></svg>
+      <div class="zoombtns">
+        <button id="zOut" aria-label="Zoom out">−</button><button id="zIn" aria-label="Zoom in">+</button>
+        <button id="zFit">Fit</button><button id="zFull">Full screen</button>
+      </div>
+      <div class="treemsg" id="treeMsg">The tree appears once there is a search to show.</div>
+    </div>
+    <div class="legend" style="margin-top:8px">
+      <span><i style="background:var(--blue-tint);border:1.5px solid var(--blue)"></i>Blue just moved</span>
+      <span><i style="background:var(--gold-tint);border:1.5px solid var(--gold)"></i>Gold just moved</span>
+      <span><i style="border:2.5px solid var(--ink)"></i>Most-visited line</span>
+      <span><i style="border:3px solid var(--step)"></i>Current simulation</span>
+      <span>N = simulations through the node, % = win chance for the player who just moved, net = network's first impression</span>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Winning chances over the game <small>agent's estimate for Blue; dark dots are solver-proven; click a dot to review that move</small></h2>
+      <svg class="chart" id="eval" viewBox="0 0 520 170"></svg>
+    </div>
+    <div class="panel">
+      <h2>Moves <small>click one to review it</small></h2>
+      <ul class="log" id="log"></ul>
+    </div>
+  </div>
+</div>
+<script>
+/*TRANSPORT*/
+const byId = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const CELL = 100, NAMES = ["Blue", "Gold"];
+const cellName = c => "ABCDE"[c % 5] + (Math.floor(c / 5) + 1);
+const cx = c => (c % 5) * CELL + CELL / 2, cy = c => Math.floor(c / 5) * CELL + CELL / 2;
+const pct = q => Math.round(50 * (q + 1));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const playerColor = p => css(p === 0 ? "--blue" : "--gold");
+const tint = p => p === 0 ? css("--blue-tint") : p === 1 ? css("--gold-tint") : css("--panel");
+const moveName = mv => mv[2] < 0 ? `${cellName(mv[0])}–${cellName(mv[1])} wins` : `${cellName(mv[0])}–${cellName(mv[1])} build ${cellName(mv[2])}`;
+
+let G = null, net = {};
+let liveThought = null, livePlacement = null, liveTree = null;
+let view = null;                 // null = live game, else index of the log entry being reviewed
+let past = { thought: null, placement: null, tree: null };
+let busy = false, sel = null, hover = null, previewNode = null;
+let hintToken = 0, agentToken = 0, chunk = 32;
+let stepInfo = null;
+const treeParams = { root: 0, max_nodes: 120, prune: 100, depth: 6, unvisited: false };
+
+// ---------- transport ------------------------------------------------------------------
+async function api(name, payload = {}) {
+  let r;
+  if (window.SANTORINI_TRANSPORT === "colab") {
+    const res = await google.colab.kernel.invokeFunction("santorini_api", [name, JSON.stringify(payload)], {});
+    r = res.data["application/json"];
+  } else {
+    const res = await fetch("/api/" + name, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    r = await res.json();
+  }
+  byId("err").textContent = r.error || "";
+  if (r.game) G = r.game;
+  if (r.net) net = r.net;
+  if ("step" in r) stepInfo = r.step;
+  return r;
+}
+const treeReq = target => ({ target, ...treeParams });
+
+// what is on display: the live game or a reviewed move
+function shown() {
+  if (view === null) return { thought: liveThought, placement: livePlacement, tree: liveTree, frame: null, entry: null };
+  return { thought: past.thought, placement: past.placement, tree: past.tree, frame: G.frames[view], entry: G.log[view] };
+}
+function boardState() {
+  if (previewNode) return { heights: previewNode.heights, workers: previewNode.workers };
+  if (view !== null) return G.frames[view];
+  return G;
+}
+
+// ---------- svg helpers -------------------------------------------------------------------
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, attrs = {}) { const t = el("text", { x, y, ...attrs }, parent); t.textContent = s; return t; }
+
+// ---------- main board ------------------------------------------------------------------------
+function legalFrom(f) { return G.legal.filter(m => m[0] === f); }
+function humanToMove() { return G && view === null && G.phase !== "over" && G.turn === G.human && !busy; }
+
+function drawBoard() {
+  const svg = byId("board");
+  svg.innerHTML = "";
+  byId("boardwrap").classList.toggle("previewing", !!previewNode);
+  const defs = el("defs", {}, svg);
+  for (const [id, color] of [["ah0", playerColor(0)], ["ah1", playerColor(1)]]) {
+    const m = el("marker", { id, viewBox: "0 0 10 10", refX: 7, refY: 5, markerWidth: 4, markerHeight: 4, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", fill: color }, m);
+  }
+  for (let i = 0; i < 5; i++) {
+    txt(svg, i * CELL + CELL / 2, -8, "ABCDE"[i], { "text-anchor": "middle", class: "coords" });
+    txt(svg, -12, i * CELL + CELL / 2 + 4, i + 1, { "text-anchor": "middle", class: "coords" });
+  }
+  if (!G) return;
+  const B = boardState(), sh = shown();
+  const placing = !previewNode && (view === null ? G.phase === "place" : sh.frame.phase === "place");
+  const heat = placing && sh.placement ? sh.placement.heat : null;
+  let hmin = 1, hmax = -1;
+  if (heat) heat.forEach(v => { if (v !== null) { hmin = Math.min(hmin, v); hmax = Math.max(hmax, v); } });
+  const occupied = [...B.workers[0], ...B.workers[1]];
+  const targets = new Map();
+  if (!previewNode && humanToMove()) {
+    if (G.phase === "place") for (let c = 0; c < 25; c++) if (!occupied.includes(c)) targets.set(c, "place");
+    if (G.phase === "play" && sel) {
+      if (sel.to === undefined) legalFrom(sel.from).forEach(m => targets.set(m[1], m[2] < 0 ? "win" : "move"));
+      else legalFrom(sel.from).filter(m => m[1] === sel.to).forEach(m => targets.set(m[2], "build"));
+    }
+  }
+  for (let c = 0; c < 25; c++) {
+    const x = (c % 5) * CELL, y = Math.floor(c / 5) * CELL, h = B.heights[c];
+    const clickable = !previewNode && (targets.has(c) || (humanToMove() && G.phase === "play" && G.workers[G.human].includes(c) && legalFrom(c).length));
+    const g = el("g", { class: "cell" + (clickable ? " click" : ""), "data-cell": c, tabindex: clickable ? 0 : -1, role: "gridcell",
+      "aria-label": `${cellName(c)}, level ${h === 4 ? "3 with dome" : h}` }, svg);
+    el("rect", { class: "turf", x: x + 2, y: y + 2, width: CELL - 4, height: CELL - 4, rx: 10, fill: css("--turf"), stroke: css("--turf-edge") }, g);
+    if (heat && heat[c] !== null && hmax > hmin) {
+      const who = view === null ? G.agent : sh.entry.player;
+      el("rect", { x: x + 2, y: y + 2, width: CELL - 4, height: CELL - 4, rx: 10, fill: playerColor(who), opacity: (0.08 + 0.55 * (heat[c] - hmin) / (hmax - hmin)).toFixed(2) }, g);
+    }
+    for (let l = 1; l <= Math.min(h, 3); l++) {
+      const inset = 6 + (l - 1) * 11;
+      el("rect", { x: x + inset, y: y + inset, width: CELL - 2 * inset, height: CELL - 2 * inset, rx: 9 - l, fill: css("--stone"), stroke: css("--stone-edge"), "stroke-width": 1.5 }, g);
+    }
+    if (h === 4) el("circle", { cx: x + 50, cy: y + 50, r: 21, fill: css("--dome"), stroke: "#0d2357", "stroke-width": 1.5 }, g);
+    if (h > 0 && h < 4) txt(g, x + 12, y + 22, h, { "font-size": 12, fill: css("--muted"), "font-weight": 600 });
+    const t = targets.get(c);
+    if (t === "move" || t === "place") el("circle", { cx: x + 50, cy: y + 50, r: 8, fill: playerColor(G.human), opacity: .55 }, g);
+    if (t === "win") el("circle", { cx: x + 50, cy: y + 50, r: 16, fill: "none", stroke: css("--win"), "stroke-width": 4 }, g);
+    if (t === "build") el("rect", { x: x + 30, y: y + 30, width: 40, height: 40, rx: 6, fill: "none", stroke: playerColor(G.human), "stroke-width": 3, "stroke-dasharray": "6 4" }, g);
+    g.addEventListener("click", () => onCell(c));
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onCell(c); } });
+  }
+  if (previewNode && previewNode.move) {
+    const [f, t, b] = previewNode.move, p = previewNode.moved_by;
+    arrow(svg, f, t, playerColor(p), 6, .95, "ah" + p);
+    if (b >= 0) el("rect", { x: cx(b) - 13, y: cy(b) - 13, width: 26, height: 26, rx: 4, fill: playerColor(p), opacity: .9 }, svg);
+  } else if (!previewNode) {
+    // last move before this position
+    const lastIdx = (view === null ? G.log.length : view) - 1;
+    const last = lastIdx >= 0 ? G.log[lastIdx] : null;
+    if (last && last.kind === "move") {
+      el("line", { x1: cx(last.from), y1: cy(last.from), x2: cx(last.to), y2: cy(last.to), stroke: playerColor(last.player), "stroke-width": 3, opacity: .35, "stroke-linecap": "round" }, svg);
+      if (last.build >= 0) el("rect", { x: cx(last.build) - 7, y: cy(last.build) + 26, width: 14, height: 5, rx: 2, fill: playerColor(last.player), opacity: .7 }, svg);
+    }
+    const th = sh.thought;
+    const showArrows = th && !placing && (view !== null || (G.phase === "play" && th.player === G.turn)) && (byId("thoughts").checked || th.player === G.human);
+    if (showArrows) drawThoughts(svg, th);
+    if (view !== null && sh.entry && sh.entry.kind === "move") {   // the move actually played
+      const e = sh.entry;
+      el("circle", { cx: cx(e.to), cy: cy(e.to), r: 27, fill: "none", stroke: css("--ink"), "stroke-width": 2.5, "stroke-dasharray": "5 4" }, svg);
+    }
+    if (placing && sh.placement && sh.placement.top.length) {
+      const cells = view !== null && sh.entry ? [sh.entry.cell] : sh.placement.top[0].cells;
+      for (const c of cells) el("rect", { x: (c % 5) * CELL + 4, y: Math.floor(c / 5) * CELL + 4, width: CELL - 8, height: CELL - 8, rx: 9, fill: "none", stroke: css("--ink"), "stroke-width": 3 }, svg);
+    }
+  }
+  for (const p of [0, 1]) for (const c of B.workers[p]) {
+    const g = el("g", {}, svg);
+    if (!previewNode && sel && sel.from === c) el("circle", { cx: cx(c), cy: cy(c), r: 25, fill: "none", stroke: playerColor(p), "stroke-width": 3, opacity: .6 }, g);
+    el("circle", { cx: cx(c), cy: cy(c) + 2, r: 17, fill: "rgba(0,0,0,.18)" }, g);
+    el("circle", { cx: cx(c), cy: cy(c), r: 17, fill: playerColor(p), stroke: "#fff", "stroke-width": 3 }, g);
+  }
+  if (!previewNode && hover !== null && sh.thought && sh.thought.moves[hover]) drawLine(svg, sh.thought, sh.thought.moves[hover]);
+}
+
+function arrow(svg, f, t, color, width, opacity, marker) {
+  const x1 = cx(f), y1 = cy(f), x2 = cx(t), y2 = cy(t), dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+  el("line", { x1: x1 + dx / len * 20, y1: y1 + dy / len * 20, x2: x2 - dx / len * 14, y2: y2 - dy / len * 14,
+    stroke: color, "stroke-width": width, opacity, "stroke-linecap": "round", "marker-end": `url(#${marker})` }, svg);
+}
+
+function drawThoughts(svg, th) {
+  const color = playerColor(th.player), mk = "ah" + th.player;
+  const groups = new Map();
+  th.moves.slice(0, 10).forEach((m, i) => {
+    const k = m.from + "-" + m.to;
+    if (!groups.has(k)) groups.set(k, { from: m.from, to: m.to, share: 0, best: false, stepUp: false, moves: [] });
+    const g = groups.get(k);
+    g.share += m.share; g.moves.push({ m, i }); g.best = g.best || i === 0; g.stepUp = g.stepUp || m.step_up;
+  });
+  const gs = [...groups.values()].sort((a, b) => b.share - a.share).slice(0, 5);
+  const maxShare = Math.max(...gs.map(g => g.share), 1e-9);
+  gs.slice().reverse().forEach(g => {
+    const s = g.stepUp ? 1 : g.share / maxShare, op = g.best ? 0.95 : 0.25 + 0.45 * s;
+    arrow(svg, g.from, g.to, color, g.best ? 7 : 2 + 4 * s, op, mk);
+    for (const { m, i } of g.moves) {
+      if (m.build < 0) continue;
+      const size = 12 + 14 * Math.sqrt(m.share / maxShare);
+      el("line", { x1: cx(m.to), y1: cy(m.to), x2: cx(m.build), y2: cy(m.build), stroke: color, "stroke-width": 1.5, "stroke-dasharray": "3 4", opacity: op * .7 }, svg);
+      el("rect", { x: cx(m.build) - size / 2, y: cy(m.build) - size / 2, width: size, height: size, rx: 4, fill: i === 0 ? color : "none", stroke: color, "stroke-width": 2.5, opacity: i === 0 ? 0.95 : op }, svg);
+    }
+  });
+  gs.slice(0, 3).forEach(g => {
+    const tx = (cx(g.from) + cx(g.to)) / 2, ty = (cy(g.from) + cy(g.to)) / 2 - 8;
+    txt(svg, tx, ty, g.stepUp ? "win" : Math.round(100 * g.share) + "%", { "text-anchor": "middle", "font-size": 13, "font-weight": 700,
+      fill: css("--ink"), stroke: css("--panel"), "stroke-width": 4, "paint-order": "stroke" });
+  });
+}
+
+function drawLine(svg, th, m) {
+  const seq = [[m.from, m.to, m.build], ...m.pv];
+  let mover = th.player;
+  seq.forEach((mv, k) => {
+    const color = playerColor(mover);
+    arrow(svg, mv[0], mv[1], color, 3, .9, "ah" + mover);
+    el("circle", { cx: cx(mv[1]) + 18, cy: cy(mv[1]) - 18, r: 10, fill: color }, svg);
+    txt(svg, cx(mv[1]) + 18, cy(mv[1]) - 14, k + 1, { "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "#fff" });
+    if (mv[2] >= 0) el("rect", { x: cx(mv[2]) - 8, y: cy(mv[2]) - 8, width: 16, height: 16, rx: 3, fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": "3 2" }, svg);
+    mover = 1 - mover;
+  });
+}
+
+// ---------- thinking panel ----------------------------------------------------------------------
+function drawThinking() {
+  const sh = shown();
+  const th = sh.thought && (view !== null || (G && G.phase === "play" && sh.thought.player === G.turn)) ? sh.thought : null;
+  const placing = G && (view === null ? G.phase === "place" : sh.frame.phase === "place");
+  let title = "What the agent thinks";
+  if (G) {
+    if (view !== null) title = th ? `Thinking behind move ${view + 1}: ${NAMES[th.player]}${th.player === G.human ? " (hint for you)" : " (the agent)"}` :
+      placing && sh.placement ? `How ${NAMES[sh.entry.player]} chose where to place` : `Move ${view + 1}: no thinking recorded`;
+    else if (placing) title = G.turn === G.agent ? `Choosing where ${NAMES[G.agent]} places` : "Place your two workers";
+    else if (th) title = th.player === G.agent ? `What ${NAMES[th.player]} (the agent) thinks` : `Hint for you (${NAMES[th.player]})`;
+  }
+  byId("thinkTitle").textContent = title;
+  let blue = 0.5;
+  const pr = byId("proof");
+  pr.className = "proof";
+  if (th) {
+    const q = th.status !== 0 ? th.status : th.search_value;
+    blue = th.player === 0 ? (q + 1) / 2 : (1 - q) / 2;
+    const mover = NAMES[th.player];
+    byId("fNet").textContent = `${pct(th.net_value)}% for ${mover}`;
+    byId("fSearch").textContent = th.simulations ? `${pct(th.search_value)}% for ${mover}` : "–";
+    byId("fSims").textContent = th.simulations.toLocaleString();
+    if (th.status === 1) { pr.textContent = `Solver: ${mover} has a forced win.`; pr.classList.add("win"); }
+    else if (th.status === -1) { pr.textContent = `Solver: ${mover} loses against perfect play.`; pr.classList.add("loss"); }
+    else pr.textContent = th.solver === 0 && byId("solver").checked ? "Solver: not decided within its budget in this position." : "Solver: off or not decided.";
+    byId("prog").style.width = Math.min(100, 100 * th.simulations / Math.max(1, th.target)) + "%";
+  } else if (placing && sh.placement) {
+    const who = view === null ? G.agent : sh.entry.player;
+    byId("fNet").textContent = "–";
+    byId("fSearch").textContent = sh.placement.top.length ? `${pct(sh.placement.top[0].score)}% for ${NAMES[who]}` : "–";
+    byId("fSims").textContent = sh.placement.candidates.toLocaleString() + " options";
+    pr.textContent = "Shaded cells: how good each cell is for the placing player's workers, judged by the network.";
+    byId("prog").style.width = 100 * sh.placement.progress + "%";
+  } else {
+    ["fNet", "fSearch", "fSims"].forEach(i => byId(i).textContent = "–");
+    pr.textContent = G && G.phase === "over" && view === null ? "Game over." : "Waiting for a position to think about.";
+    byId("prog").style.width = "0%";
+  }
+  if (G && G.phase === "over" && view === null) blue = G.winner === 0 ? 1 : 0;
+  byId("meterB").style.width = (100 * blue).toFixed(1) + "%";
+  byId("meterB").textContent = `Blue ${Math.round(100 * blue)}%`;
+  byId("meterG").textContent = `${100 - Math.round(100 * blue)}% Gold`;
+  drawVisits(th, placing ? sh.placement : null);
+}
+
+function drawVisits(th, placement) {
+  const svg = byId("visits");
+  svg.innerHTML = "";
+  const W = 520, H = 250, L = 34, R = 8, T = 22, B = 62;
+  byId("visitsLegend").innerHTML = "";
+  byId("cands").innerHTML = "";
+  if (!th || !th.moves.length) {
+    byId("chartSub").textContent = "";
+    txt(svg, W / 2, H / 2, placement ? "Placement is judged by the network directly; see the shaded board." : "Bars appear here while the agent thinks.",
+      { "text-anchor": "middle", "font-size": 13, fill: css("--muted") });
+    byId("line").textContent = "";
+    return;
+  }
+  const ms = th.moves.slice(0, 10);
+  byId("chartSub").textContent = `${th.simulations.toLocaleString()} simulations, ${th.n_moves} possible moves`;
+  const ymax = Math.max(0.05, ...ms.map(m => Math.max(m.share, m.prior))) * 1.18;
+  const y = v => T + (H - T - B) * (1 - v / ymax);
+  for (let i = 0; i <= 4; i++) {
+    const v = ymax * i / 4;
+    el("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css("--line"), "stroke-width": 1 }, svg);
+    txt(svg, L - 5, y(v) + 4, Math.round(100 * v) + "%", { "text-anchor": "end", "font-size": 10, fill: css("--muted") });
+  }
+  const slot = (W - L - R) / ms.length, bw = Math.min(30, slot * 0.42);
+  const color = playerColor(th.player);
+  ms.forEach((m, i) => {
+    const x0 = L + slot * i + slot / 2;
+    const g = el("g", { "data-i": i, style: "cursor:pointer" }, svg);
+    el("rect", { x: L + slot * i, y: T - 6, width: slot, height: H - T - B + 6, fill: hover === i ? css("--line") : "transparent", opacity: .5 }, g);
+    el("rect", { x: x0 - bw, y: y(m.share), width: bw, height: Math.max(0, y(0) - y(m.share)), fill: color, rx: 2 }, g);
+    el("rect", { x: x0 + 1, y: y(m.prior), width: bw * 0.7, height: Math.max(0, y(0) - y(m.prior)), fill: "none", stroke: css("--ink"), "stroke-width": 1.3, "stroke-dasharray": "3 2", rx: 2 }, g);
+    const lab = m.step_up ? "wins" : m.proof === 1 ? "proven" : m.proof === -1 ? "loses" : m.visits ? pct(m.q) + "%" : "";
+    txt(g, x0 - bw / 2, y(m.share) - 5, lab, { "text-anchor": "middle", "font-size": 11, "font-weight": 700,
+      fill: m.proof === 1 || m.step_up ? css("--win") : m.proof === -1 ? css("--loss") : css("--ink") });
+    const short = m.build < 0 ? `${cellName(m.from)}–${cellName(m.to)}` : `${cellName(m.from)}–${cellName(m.to)} ${cellName(m.build)}`;
+    txt(g, x0, H - B + 14, short, { "text-anchor": "end", "font-size": 10.5, fill: i === 0 ? css("--ink") : css("--muted"),
+      "font-weight": i === 0 ? 700 : 400, transform: `rotate(-38 ${x0} ${H - B + 14})` });
+    g.addEventListener("mouseenter", () => { hover = i; drawBoard(); drawLineText(); drawVisits(th, null); });
+    g.addEventListener("mouseleave", () => { hover = null; drawBoard(); drawLineText(); drawVisits(th, null); });
+  });
+  byId("visitsLegend").innerHTML = `<span><i style="background:${color}"></i>share of simulations</span>
+    <span><i style="border:1.3px dashed ${css("--ink")}"></i>network's prior (before search)</span>
+    <span>number on a bar: win chance for ${NAMES[th.player]} after that move</span>`;
+  const rows = th.moves.slice(0, 12).map((m, i) => `<tr><td>${m.text}</td><td>${m.visits}</td><td>${m.visits ? pct(m.q) + "%" : "–"}</td>
+    <td>${(100 * m.prior).toFixed(1)}%</td><td>${m.step_up ? "wins now" : m.proof === 1 ? "forced win" : m.proof === -1 ? "loses" : ""}</td></tr>`).join("");
+  byId("cands").innerHTML = `<table class="cands"><thead><tr><th>Move</th><th>Visits</th><th>Win chance</th><th>Prior</th><th>Solver</th></tr></thead><tbody>${rows}</tbody></table>`;
+  drawLineText();
+}
+
+function drawLineText() {
+  const th = shown().thought;
+  if (!th || !th.moves.length) { byId("line").textContent = ""; return; }
+  const i = hover === null ? 0 : hover, m = th.moves[i];
+  const seq = [[m.from, m.to, m.build], ...m.pv];
+  let mover = th.player;
+  const parts = seq.map((mv, k) => { const s = `${k + 1}. ${NAMES[mover]} ${moveName(mv)}`; mover = 1 - mover; return s; });
+  byId("line").innerHTML = (hover === null ? "Expected line: " : "Line after this move: ") + `<span>${parts.join(", ")}</span>` +
+    (m.pv_ends_in_win ? "" : seq.length > 1 ? ", …" : "") + (hover === null ? " (hover a bar to show its line on the board)" : "");
+}
+
+// ---------- search tree -----------------------------------------------------------------------------
+const tv = { x: 0, y: 0, k: 1, fitted: false, key: null };
+let treeLayout = null;
+
+function nodeSize(opts) {
+  if (opts.minimal) return { w: 74, h: (opts.boards ? 66 : 4) + 36 };
+  return { w: 140, h: 20 + (opts.boards ? 74 : 0) + 34 + (opts.puct ? 13 : 0) };
+}
+
+function drawTree() {
+  const sh = shown(), tree = sh.tree, g = byId("treeG");
+  g.innerHTML = "";
+  const msg = byId("treeMsg");
+  const liveOk = view === null && G && G.phase === "play";
+  ["sSelect", "sExpand", "sBackup", "sOne", "sMany"].forEach(id => byId(id).disabled = !liveOk || stepping || (busy && !paused()));
+  byId("sExpand").disabled ||= !(stepInfo && stepInfo.phase === "selected");
+  byId("sBackup").disabled ||= !(stepInfo && stepInfo.phase === "evaluated");
+  byId("stepbar").style.opacity = view === null ? 1 : .5;
+  byId("explain").innerHTML = view === null && stepInfo && stepInfo.explain ? stepExplain() : "";
+  crumb(tree);
+  if (!tree || !tree.nodes.length) {
+    msg.style.display = "grid";
+    msg.textContent = view !== null ? "No search tree was recorded for this move." :
+      G && G.phase === "place" ? "The tree starts once both players have placed their workers." : "The tree appears once there is a search to show.";
+    treeLayout = null;
+    return;
+  }
+  msg.style.display = "none";
+  const opts = { boards: byId("tBoards").checked, puct: byId("tPuct").checked, minimal: byId("tMinimal").checked };
+  const { w: NW, h: NH } = nodeSize(opts);
+  const GAPX = 14, GAPY = 46;
+  const byIdMap = new Map(tree.nodes.map(n => [n.id, n]));
+  const kids = new Map();
+  for (const n of tree.nodes) if (n.parent !== null && byIdMap.has(n.parent)) {
+    if (!kids.has(n.parent)) kids.set(n.parent, []);
+    kids.get(n.parent).push(n);
+  }
+  for (const [k, list] of kids) {      // most visited in the middle, so the main line runs straight down
+    list.sort((a, b) => b.n - a.n || (b.prior || 0) - (a.prior || 0));
+    const out = [];
+    list.forEach((c, i) => { if (i % 2) out.push(c); else out.unshift(c); });
+    kids.set(k, out);
+  }
+  const root = tree.nodes[0];
+  const pos = new Map();
+  let cursor = 0;
+  (function place(n, d) {          // simple tidy layout: leaves left to right, parents centred over children
+    const ch = kids.get(n.id) || [];
+    if (!ch.length) { pos.set(n.id, { x: cursor + NW / 2, y: d * (NH + GAPY) }); cursor += NW + GAPX; return; }
+    ch.forEach(c => place(c, d + 1));
+    const xs = ch.map(c => pos.get(c.id).x);
+    pos.set(n.id, { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: d * (NH + GAPY) });
+  })(root, 0);
+  const width = Math.max(NW, cursor - GAPX), height = Math.max(...[...pos.values()].map(p => p.y)) + NH;
+  treeLayout = { width, height, rootX: pos.get(root.id).x };
+  // edges
+  for (const n of tree.nodes) {
+    if (!pos.has(n.parent)) continue;
+    const a = pos.get(n.parent), b = pos.get(n.id), par = byIdMap.get(n.parent);
+    const share = par.n ? n.n / par.n : 0;
+    const onStep = n.step && par.step, onPV = n.pv && par.pv;
+    const y1 = a.y + NH, y2 = b.y, my = (y1 + y2) / 2;
+    el("path", { d: `M${a.x},${y1} C${a.x},${my} ${b.x},${my} ${b.x},${y2}`, fill: "none",
+      stroke: onStep ? css("--step") : onPV ? css("--ink") : n.moved_by !== null ? playerColor(n.moved_by) : css("--muted"),
+      "stroke-width": onStep ? 5 : onPV ? 3.2 : 1 + 4 * share, opacity: onStep || onPV ? 0.95 : n.unvisited ? 0.35 : 0.55 }, g);
+  }
+  for (const n of tree.nodes) drawNode(g, n, pos.get(n.id), NW, NH, opts, tree);
+  const key = tree.thought + ":" + treeParams.root + ":" + JSON.stringify(opts);
+  if (tv.key !== key) { tv.key = key; readableView(); } else applyView();
+}
+
+function drawNode(g, n, p, NW, NH, opts, tree) {
+  const grp = el("g", { class: "tnode", transform: `translate(${p.x - NW / 2},${p.y})`, "data-id": n.id }, g);
+  const who = n.moved_by;   // the player whose move led here (null at the root)
+  const stroke = n.step ? css("--step") : n.pv ? css("--ink") : who !== null ? playerColor(who) : css("--muted");
+  if (n.step) el("rect", { x: -5, y: -5, width: NW + 10, height: NH + 10, rx: 13, fill: "none", stroke: css("--step"), "stroke-width": 7, opacity: .22 }, grp);
+  el("rect", { class: "card", width: NW, height: NH, rx: 9, fill: who !== null ? tint(who) : css("--panel"), stroke,
+    "stroke-width": n.step ? 3.2 : n.pv ? 2.6 : 1.4, "stroke-dasharray": n.unvisited ? "4 3" : "none", opacity: n.unvisited ? 0.6 : 1 }, grp);
+  if (n.proof !== null) {   // proven nodes get a coloured stripe on the left
+    const good = who !== null ? n.proof === who : n.proof === n.to_move;
+    el("rect", { x: 0, y: 6, width: 5, height: NH - 12, rx: 2.5, fill: good ? css("--win") : css("--loss") }, grp);
+  }
+  const center = { "text-anchor": "middle" };
+  const winLabel = n.win === null ? "unvisited" : `${NAMES[who !== null ? who : n.to_move]} ${Math.round(100 * n.win)}%`;
+  let y = 0;
+  if (!opts.minimal) {
+    const title = n.move ? n.move_text : `Now: ${NAMES[n.to_move]} to move`;
+    txt(grp, NW / 2, 14, title.length > 21 ? title.replace(" build ", " b ") : title, { ...center, "font-size": 10.5, "font-weight": 650, fill: css("--ink") });
+    y = 20;
+  } else y = 5;
+  if (opts.boards) {
+    const bs = opts.minimal ? 12 : 14;
+    miniBoard(grp, n, (NW - 5 * bs) / 2, y, bs);
+    y += 5 * bs + 4;
+  }
+  const line = (s, fs, wgt, fill) => { y += fs + 3; txt(grp, NW / 2, y, s, { ...center, "font-size": fs, "font-weight": wgt, fill }); };
+  if (opts.minimal) {
+    line(`N ${n.n}`, 10.5, 650, css("--ink"));
+    line(n.win === null ? "–" : `${Math.round(100 * n.win)}%`, 10.5, 650, who !== null ? playerColor(who) : css("--ink"));
+  } else {
+    line(`N ${n.n}   ${winLabel}`, 11, 650, css("--ink"));
+    let second;
+    if (n.terminal) second = n.terminal;
+    else if (n.proof !== null) second = `proven: ${NAMES[n.proof]} wins`;
+    else second = [n.net !== null ? `net ${Math.round(100 * n.net)}%` : (n.expanded ? "" : "not evaluated"),
+                   n.prior !== null ? `prior ${(100 * n.prior).toFixed(n.prior < 0.1 ? 1 : 0)}%` : ""].filter(Boolean).join("   ");
+    line(second, 10, 500, n.proof !== null && !n.terminal ? (n.proof === (who !== null ? who : n.to_move) ? css("--win") : css("--loss")) : css("--muted"));
+    if (opts.puct) line(n.puct !== null ? `Q ${n.unvisited ? "0.00" : n.q.toFixed(2)} + U ${n.u.toFixed(2)} = ${n.puct.toFixed(2)}` : "root", 9.5, 500, css("--ink"));
+    if (n.id >= 0) txt(grp, NW - 6, 9, "#" + n.id, { "text-anchor": "end", "font-size": 8, fill: css("--muted") });
+  }
+  const title = el("title", {}, grp);
+  title.textContent = [n.move ? `${NAMES[who]} ${n.move_text}` : "Current position", `Simulations through here: ${n.n}`,
+    n.win !== null ? `Win chance for ${NAMES[who !== null ? who : n.to_move]} after search: ${Math.round(100 * n.win)}%` : "Not visited yet",
+    n.net !== null ? `Network's first impression: ${Math.round(100 * n.net)}%` : "", n.prior !== null ? `Network's prior for this move: ${(100 * n.prior).toFixed(1)}%` : "",
+    n.puct !== null ? `PUCT score: Q ${n.q.toFixed(3)} + U ${n.u.toFixed(3)} = ${n.puct.toFixed(3)}` : "", n.terminal || "",
+    n.expanded && n.id >= 0 ? "Click to explore the tree from here" : ""].filter(Boolean).join("\n");
+  grp.addEventListener("mouseenter", () => { previewNode = n; drawBoard(); });
+  grp.addEventListener("mouseleave", () => { previewNode = null; drawBoard(); });
+  grp.addEventListener("click", () => {
+    if (tv.moved) return;
+    if (n.id >= 0 && n.expanded && n.id !== treeParams.root) { treeParams.root = n.id; refreshTree(); }
+  });
+}
+
+function miniBoard(parent, n, x, y, s) {
+  const g = el("g", { transform: `translate(${x},${y})` }, parent);
+  const shade = [css("--turf"), "#e3e6df", "#f3f4ef", "#ffffff"];
+  for (let c = 0; c < 25; c++) {
+    const r = Math.floor(c / 5), k = c % 5, h = n.heights[c];
+    el("rect", { x: k * s, y: r * s, width: s - 1, height: s - 1, rx: 1.5, fill: h === 4 ? css("--dome") : shade[h], stroke: h ? css("--stone-edge") : "none", "stroke-width": .6 }, g);
+    if (h > 0 && h < 4 && s >= 13) txt(g, k * s + 2, r * s + 7, h, { "font-size": 6, fill: "#6b7468" });
+  }
+  for (const p of [0, 1]) for (const c of n.workers[p])
+    el("circle", { cx: (c % 5) * s + s / 2 - .5, cy: Math.floor(c / 5) * s + s / 2 - .5, r: s * 0.32, fill: playerColor(p), stroke: "#fff", "stroke-width": .8 }, g);
+  if (n.move) {
+    const [f, t, b] = n.move, col = playerColor(n.moved_by);
+    el("line", { x1: (f % 5) * s + s / 2, y1: Math.floor(f / 5) * s + s / 2, x2: (t % 5) * s + s / 2, y2: Math.floor(t / 5) * s + s / 2, stroke: col, "stroke-width": 1.6, opacity: .9 }, g);
+    if (b >= 0) el("rect", { x: (b % 5) * s + 1, y: Math.floor(b / 5) * s + 1, width: s - 3, height: s - 3, rx: 1.5, fill: "none", stroke: col, "stroke-width": 1.6 }, g);
+  }
+}
+
+function crumb(tree) {
+  const c = byId("crumb");
+  if (!tree || !tree.nodes.length) { c.textContent = ""; return; }
+  const r = tree.nodes[0];
+  const shownCount = tree.nodes.length;
+  c.innerHTML = (treeParams.root ? `Exploring from #${r.id}${r.move ? ` (${NAMES[r.moved_by]} ${r.move_text})` : ""}<button id="crumbTop">Back to the top</button> ` : "") +
+    `${shownCount} of ${tree.total_nodes.toLocaleString()} nodes shown, ${tree.simulations.toLocaleString()} simulations`;
+  const b = byId("crumbTop");
+  if (b) b.onclick = () => { treeParams.root = 0; refreshTree(); };
+}
+
+function stepExplain() {
+  const s = stepInfo;
+  const label = { selected: "1. Select", evaluated: "2. Expand and evaluate", backed_up: "3. Back up", done: "Finished" }[s.phase] || "";
+  const body = s.explain.replace(/^[^:]+: /, "");
+  return `<b>${label}.</b> ${body.charAt(0).toUpperCase() + body.slice(1)}`;
+}
+
+// pan and zoom
+function applyView() { byId("treeG").setAttribute("transform", `translate(${tv.x},${tv.y}) scale(${tv.k})`); }
+function fitTree() {
+  if (!treeLayout) return;
+  const box = byId("tree").getBoundingClientRect();
+  const k = Math.min(1.4, (box.width - 30) / treeLayout.width, (box.height - 30) / treeLayout.height);
+  tv.k = Math.max(0.05, k);
+  tv.x = (box.width - treeLayout.width * tv.k) / 2;
+  tv.y = 16;
+  applyView();
+}
+function readableView() {   // fit if that keeps nodes legible, otherwise zoom to a readable size centred on the root
+  if (!treeLayout) return;
+  const boxEl = byId("treebox");
+  if (!document.fullscreenElement && !boxEl.style.height)
+    boxEl.style.minHeight = "";
+  const box = byId("tree").getBoundingClientRect();
+  const fit = Math.min(1.2, (box.width - 30) / treeLayout.width, (box.height - 30) / treeLayout.height);
+  if (fit >= 0.7) return fitTree();
+  tv.k = 0.75;
+  tv.x = box.width / 2 - treeLayout.rootX * tv.k;
+  tv.y = 16;
+  applyView();
+}
+function zoomAt(f, px, py) {
+  const box = byId("tree").getBoundingClientRect();
+  if (px === undefined) { px = box.width / 2; py = box.height / 2; }
+  const k2 = Math.min(4, Math.max(0.05, tv.k * f));
+  tv.x = px - (px - tv.x) * k2 / tv.k; tv.y = py - (py - tv.y) * k2 / tv.k; tv.k = k2;
+  applyView();
+}
+(function panZoom() {
+  const svg = byId("tree");
+  let drag = null;
+  svg.addEventListener("wheel", e => { e.preventDefault(); const b = svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - b.left, e.clientY - b.top); }, { passive: false });
+  svg.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, tx: tv.x, ty: tv.y }; tv.moved = false; });
+  window.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) { tv.moved = true; svg.classList.add("dragging"); }
+    tv.x = drag.tx + dx; tv.y = drag.ty + dy; applyView();
+  });
+  window.addEventListener("pointerup", () => { drag = null; svg.classList.remove("dragging"); setTimeout(() => tv.moved = false, 0); });
+  byId("zIn").onclick = () => zoomAt(1.25);
+  byId("zOut").onclick = () => zoomAt(0.8);
+  byId("zFit").onclick = fitTree;
+  byId("zFull").onclick = () => {
+    const box = byId("treebox");
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (box.requestFullscreen) box.requestFullscreen().catch(() => { box.style.height = box.style.height ? "" : "85vh"; setTimeout(fitTree, 50); });
+    else { box.style.height = box.style.height ? "" : "85vh"; setTimeout(fitTree, 50); }
+  };
+  document.addEventListener("fullscreenchange", () => setTimeout(fitTree, 80));
+})();
+
+async function refreshTree() {
+  const target = view === null ? "live" : view;
+  const r = await api("tree", treeReq(target));
+  if (view === null) liveTree = r.tree; else past.tree = r.tree;
+  drawTree();
+}
+
+// ---------- value chart, log, status, timeline ---------------------------------------------------------
+function drawEval() {
+  const svg = byId("eval");
+  svg.innerHTML = "";
+  const W = 520, H = 170, L = 34, R = 8, T = 10, B = 22;
+  const n = G ? Math.max(G.log.length, 6) : 6;
+  const X = e => L + (W - L - R) * (e + 0.5) / n, Y = b => T + (H - T - B) * (1 - b);
+  for (const [b, lab] of [[1, "100%"], [0.75, "75%"], [0.5, "50%"], [0.25, "25%"], [0, "0%"]]) {
+    el("line", { x1: L, x2: W - R, y1: Y(b), y2: Y(b), stroke: css("--line"), "stroke-dasharray": b === 0.5 ? "4 3" : "none" }, svg);
+    txt(svg, L - 5, Y(b) + 3, lab, { "text-anchor": "end", "font-size": 9.5, fill: css("--muted") });
+  }
+  txt(svg, L + 4, Y(1) + 11, "Blue ahead", { "font-size": 10, fill: css("--blue") });
+  txt(svg, L + 4, Y(0) - 4, "Gold ahead", { "font-size": 10, fill: css("--gold") });
+  txt(svg, W - R, H - 5, "move", { "text-anchor": "end", "font-size": 9.5, fill: css("--muted") });
+  if (view !== null) el("line", { x1: X(view), x2: X(view), y1: T, y2: H - B, stroke: css("--ink"), "stroke-width": 1.5, opacity: .5 }, svg);
+  if (!G || !G.evals.length) {
+    txt(svg, (L + W) / 2, H / 2 - 8, "Fills in as the agent thinks.", { "text-anchor": "middle", "font-size": 12, fill: css("--muted") });
+    return;
+  }
+  const pts = G.evals.slice().sort((a, b) => a.entry - b.entry).map(e => [X(e.entry), Y(e.blue), e]);
+  const defs = el("defs", {}, svg);
+  const cpA = el("clipPath", { id: "above" }, defs); el("rect", { x: 0, y: 0, width: W, height: Y(0.5) }, cpA);
+  const cpB = el("clipPath", { id: "below" }, defs); el("rect", { x: 0, y: Y(0.5), width: W, height: H }, cpB);
+  const area = `M${pts[0][0]},${Y(0.5)} ` + pts.map(p => `L${p[0]},${p[1]}`).join(" ") + ` L${pts[pts.length - 1][0]},${Y(0.5)} Z`;
+  el("path", { d: area, fill: css("--blue"), opacity: .35, "clip-path": "url(#above)" }, svg);
+  el("path", { d: area, fill: css("--gold"), opacity: .45, "clip-path": "url(#below)" }, svg);
+  el("polyline", { points: pts.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "), fill: "none", stroke: css("--ink"), "stroke-width": 1.8 }, svg);
+  for (const [x, y, e] of pts) {
+    const c = el("circle", { cx: x, cy: y, r: e.proven ? 4.5 : 3.5, fill: e.proven ? css("--ink") : css("--panel"), stroke: css("--ink"), "stroke-width": 1.5, style: "cursor:pointer" }, svg);
+    const t = el("title", {}, c); t.textContent = `Move ${e.entry + 1}: Blue ${Math.round(100 * e.blue)}%${e.proven ? " (proven)" : ""}${e.by === "hint" ? ", from a hint" : ""}`;
+    c.addEventListener("click", () => setView(e.entry));
+  }
+}
+
+function drawLog() {
+  const ul = byId("log");
+  ul.innerHTML = "";
+  if (!G) return;
+  G.log.forEach((e, i) => {
+    const li = document.createElement("li");
+    if (view === i) li.className = "cur";
+    li.innerHTML = `<span class="n">${i + 1}</span><span class="dot" style="background:${playerColor(e.player)}"></span>
+      <span>${NAMES[e.player]}${e.player === G.human ? " (you)" : ""} ${e.text}</span><span class="note">${e.note || ""}</span>`;
+    li.addEventListener("click", () => setView(i));
+    ul.appendChild(li);
+  });
+  if (view === null) ul.scrollTop = ul.scrollHeight;
+}
+
+function paused() { return byId("pause").checked && G && G.turn === G.agent && G.phase === "play" && view === null; }
+
+function drawStatus() {
+  const s = byId("status");
+  if (!G) return;
+  const you = G.human, them = G.agent, span = p => `<span class="who-${p}">${NAMES[p]}</span>`;
+  let msg;
+  if (view !== null) {
+    const e = G.log[view];
+    msg = `Reviewing move ${view + 1}: ${span(e.player)} ${e.text}. The board shows the position before it.`;
+  } else if (G.phase === "over") msg = `${span(G.winner)} wins: ${G.reason}. ${G.winner === you ? "Well played." : "Take back a move, review the game, or start a new one."}`;
+  else if (G.turn === them && paused() && !busy) msg = `${span(them)} is paused. Step through its search below, then press Let the agent move.`;
+  else if (G.turn === them) msg = busy ? `${span(them)} is thinking…` : `${span(them)} to move.`;
+  else if (G.phase === "place") msg = `You are ${span(you)}. Place worker ${G.workers[you].length + 1} of 2 on any empty cell.`;
+  else if (!sel) msg = `Your move as ${span(you)}: pick one of your workers.`;
+  else if (sel.to === undefined) msg = `Move the worker on ${cellName(sel.from)} to a marked cell (a green ring wins at once). Click it again to cancel.`;
+  else msg = `Now build next to ${cellName(sel.to)} on a dashed square.`;
+  s.innerHTML = msg;
+  byId("net").textContent = net.source ? `Network: ${net.source}` + (net.iteration ? `, iteration ${net.iteration}` : "") +
+    (net.blocks ? `, ${net.blocks}×${net.channels} ResNet` : "") + (net.device ? ` on ${net.device}` : "") : "";
+  byId("undo").disabled = busy || view !== null || !G.log.some(e => e.player === G.human);
+  byId("letMove").hidden = !paused();
+  const tl = byId("tl");
+  tl.max = G.log.length; tl.value = view === null ? G.log.length : view;
+  byId("tlLabel").innerHTML = view === null ? `<b>Now</b>, after ${G.log.length} move${G.log.length === 1 ? "" : "s"}. Drag the slider to review earlier moves and the thinking behind them.` :
+    `<b>Move ${view + 1} of ${G.log.length}</b>: ${NAMES[G.log[view].player]} ${G.log[view].text}${G.log[view].thought !== undefined ? "" : " (no search recorded)"}`;
+  byId("tlPrev").disabled = (view === null ? G.log.length : view) <= 0;
+  byId("tlNext").disabled = view === null;
+  byId("toNow").hidden = view === null;
+  const f = view !== null ? G.frames[view] : null;
+  byId("playHere").hidden = !(f && f.turn === G.human && f.phase !== "over");
+}
+
+function render() {
+  drawBoard(); drawThinking(); drawTree(); drawEval(); drawLog(); drawStatus();
+  if (window.google && google.colab && google.colab.output && google.colab.output.setIframeHeight)
+    google.colab.output.setIframeHeight(document.documentElement.scrollHeight, true);
+}
+
+async function setView(k) {
+  if (!G) return;
+  hover = null; previewNode = null; sel = null;
+  if (k === null || k >= G.log.length) { view = null; treeParams.root = 0; render(); return; }
+  view = Math.max(0, k);
+  treeParams.root = 0;
+  past = { thought: null, placement: null, tree: null };
+  render();
+  const want = view;
+  const r = await api("thought", { entry: view, tree: treeReq(view) });
+  if (view !== want) return;
+  past = { thought: r.thought, placement: r.placement, tree: r.tree || null };
+  render();
+}
+
+// ---------- flow ---------------------------------------------------------------------------------
+async function onCell(c) {
+  if (!humanToMove()) return;
+  if (G.phase === "place") { hintToken++; await api("place", { cell: c }); render(); return next(); }
+  if (!sel) { if (G.workers[G.human].includes(c) && legalFrom(c).length) { sel = { from: c }; hover = null; } return render(); }
+  if (sel.to === undefined) {
+    if (c === sel.from) { sel = null; return render(); }
+    if (G.workers[G.human].includes(c) && legalFrom(c).length) { sel = { from: c }; return render(); }
+    const ms = legalFrom(sel.from).filter(m => m[1] === c);
+    if (!ms.length) return;
+    if (ms[0][2] < 0) return submit(sel.from, c, -1);
+    sel = { from: sel.from, to: c }; return render();
+  }
+  if (!legalFrom(sel.from).some(m => m[1] === sel.to && m[2] === c)) { sel = null; return render(); }
+  return submit(sel.from, sel.to, c);
+}
+
+async function submit(f, t, b) {
+  hintToken++;
+  sel = null; liveThought = null; liveTree = null; stepInfo = null; treeParams.root = 0;
+  await api("move", { frm: f, to: t, build: b });
+  render();
+  next();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function thinkLoop(token, isAgent) {
+  const target = +byId("sims").value;
+  for (;;) {
+    if (isAgent ? token !== agentToken : token !== hintToken) return false;
+    const done = liveThought && G && liveThought.player === G.turn ? liveThought.simulations : 0;
+    const ask = G && G.phase === "play" ? Math.max(1, Math.min(chunk, target - done)) : chunk;
+    const t0 = performance.now();
+    const r = await api("think", { sims: ask, tree: G.phase === "play" ? treeReq("live") : null });
+    const dt = performance.now() - t0;
+    if (isAgent ? token !== agentToken : token !== hintToken) return false;
+    if ("thought" in r) liveThought = r.thought;
+    if ("placement" in r) livePlacement = r.placement;
+    if ("tree" in r) liveTree = r.tree;
+    if (ask === chunk) chunk = Math.max(8, Math.min(512, Math.round(chunk * (dt > 0 ? 350 / dt : 2))));
+    render();
+    if (G.phase === "place") { if (livePlacement && livePlacement.progress >= 1) return true; continue; }
+    if (!r.thought || r.thought.done || r.thought.simulations >= target) return true;
+  }
+}
+
+async function next() {
+  if (!G || G.phase === "over") { render(); return; }
+  if (G.turn === G.agent) {
+    if (paused()) { busy = false; render(); return; }
+    busy = true; render();
+    const token = ++agentToken;
+    const finished = await thinkLoop(token, true);
+    if (!finished || token !== agentToken) { busy = false; render(); return; }
+    await sleep(250);
+    const played = await api("agent_play");
+    if (token !== agentToken) return;
+    busy = false; livePlacement = null; liveThought = null; liveTree = null; stepInfo = null; treeParams.root = 0;
+    render();
+    return next();
+  }
+  if (byId("hints").checked && G.phase === "play") await thinkLoop(++hintToken, false);
+}
+
+let stepping = false;
+async function step(action, n) {
+  if (view !== null || !G || G.phase !== "play" || stepping) return;
+  hintToken++;
+  stepping = true;
+  if (!liveThought || liveThought.player !== G.turn) byId("explain").innerHTML = "Starting a search for this position (the exact solver checks it first)…";
+  ["sSelect", "sExpand", "sBackup", "sOne", "sMany"].forEach(id => byId(id).disabled = true);
+  let r;
+  try { r = await api("step", { action, n: n || 1, tree: treeReq("live") }); } finally { stepping = false; }
+  if ("thought" in r) liveThought = r.thought;
+  if ("tree" in r) liveTree = r.tree;
+  render();
+}
+
+async function newGame(human) {
+  agentToken++; hintToken++;
+  Object.assign(treeParams, { root: 0 });
+  sel = null; hover = null; liveThought = null; livePlacement = null; liveTree = null; busy = false; view = null; stepInfo = null;
+  await api("new", { human, sims: +byId("sims").value, solver: byId("solver").checked });
+  render(); next();
+}
+
+byId("newBlue").onclick = () => newGame(0);
+byId("newGold").onclick = () => newGame(1);
+byId("undo").onclick = async () => { agentToken++; hintToken++; busy = false; sel = null; liveThought = null; liveTree = null; livePlacement = null; stepInfo = null; await api("undo"); render(); next(); };
+byId("playHere").onclick = async () => { const k = view; agentToken++; hintToken++; busy = false; view = null; liveThought = null; liveTree = null; stepInfo = null; await api("rewind", { entry: k }); render(); next(); };
+byId("toNow").onclick = () => setView(null);
+byId("tl").oninput = e => setView(+e.target.value);
+byId("tlPrev").onclick = () => setView((view === null ? G.log.length : view) - 1);
+byId("tlNext").onclick = () => setView(view === null ? null : view + 1);
+byId("sims").onchange = () => api("settings", { sims: +byId("sims").value });
+byId("solver").onchange = () => api("settings", { solver: byId("solver").checked });
+byId("hints").onchange = () => { if (!byId("hints").checked) { hintToken++; if (liveThought && G && liveThought.player === G.human) { liveThought = null; liveTree = null; } render(); } else next(); };
+byId("thoughts").onchange = render;
+byId("pause").onchange = () => { if (!byId("pause").checked) next(); else { agentToken++; busy = false; render(); } };
+byId("letMove").onclick = () => { byId("pause").checked = false; next(); };
+byId("sSelect").onclick = () => step("select");
+byId("sExpand").onclick = () => step("expand");
+byId("sBackup").onclick = () => step("backup");
+byId("sOne").onclick = () => step("one");
+byId("sMany").onclick = () => step("many", 25);
+for (const [id, key, fmt] of [["tMax", "max_nodes", v => v], ["tPrune", "prune", v => v + "%"], ["tDepth", "depth", v => v]]) {
+  byId(id).oninput = e => { byId(id + "V").textContent = fmt(e.target.value); };
+  byId(id).onchange = e => { treeParams[key] = +e.target.value; refreshTree(); };
+}
+byId("tHide").onchange = e => { treeParams.unvisited = !e.target.checked; refreshTree(); };
+for (const id of ["tBoards", "tPuct", "tMinimal"]) byId(id).onchange = drawTree;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && sel) { sel = null; render(); } });
+window.addEventListener("resize", () => { if (treeLayout) readableView(); });
+
+(async () => {
+  try {
+    const r = await api("state", { tree: treeReq("live") });
+    if (r.settings) { byId("sims").value = String(r.settings.sims); byId("solver").checked = r.settings.solver; }
+    if (r.thought) liveThought = r.thought;
+    if (r.tree) liveTree = r.tree;
+    if (!G.log.length) await api("new", { human: 0, sims: +byId("sims").value, solver: byId("solver").checked });
+    render(); next();
+  } catch (e) {
+    byId("status").textContent = "Can't reach the agent. Run the cell that starts it, then reload this widget.";
+    byId("err").textContent = String(e);
+  }
+})();
+</script>
+</body>
+</html>
