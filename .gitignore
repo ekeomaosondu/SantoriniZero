@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Compiled C++ module and test binary
+*.so
+*.pyd
+cpp/test
+
+# Training outputs (datasets, checkpoints, plots)
+runs/
+constraints.txt
+
+# OS
+.DS_Store
